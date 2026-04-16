@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sales Tracker — Analytics</title>
+  <link rel="stylesheet" href="css/main.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<div class="app-shell">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon">💰</div>
+      <h1>Sales Tracker</h1>
+      <span>Business Intelligence</span>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section-label">Main</div>
+      <a href="index.html"     class="nav-link"><span class="nav-icon">📊</span> Dashboard</a>
+      <a href="sales.html"     class="nav-link"><span class="nav-icon">🧾</span> Sales Log</a>
+      <a href="products.html"  class="nav-link"><span class="nav-icon">📦</span> Products</a>
+      <a href="analytics.html" class="nav-link active"><span class="nav-icon">📈</span> Analytics</a>
+    </nav>
+    <div class="sidebar-footer">Sales Tracker v1.0</div>
+  </aside>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+  <div class="main-content">
+    <header class="top-header">
+      <div style="display:flex;align-items:center;gap:14px;">
+        <button class="menu-toggle" id="menu-toggle">☰</button>
+        <div class="header-left">
+          <h2>Analytics</h2>
+          <p>Deep-dive revenue, trends, and category breakdowns</p>
+        </div>
+      </div>
+    </header>
+
+    <div class="page-body page-fade">
+
+      <!-- Summary Cards -->
+      <div class="metric-grid" style="margin-bottom:24px;" id="analytics-metrics">
+        <div class="metric-card">
+          <div class="card-icon">💵</div>
+          <div class="card-label">Total Revenue</div>
+          <div class="card-value gold" id="a-revenue">—</div>
+        </div>
+        <div class="metric-card">
+          <div class="card-icon">📊</div>
+          <div class="card-label">Avg Order Value</div>
+          <div class="card-value" id="a-aov">—</div>
+        </div>
+        <div class="metric-card">
+          <div class="card-icon">📅</div>
+          <div class="card-label">This Month</div>
+          <div class="card-value" id="a-month">—</div>
+          <div class="card-sub" id="a-growth"></div>
+        </div>
+        <div class="metric-card">
+          <div class="card-icon">🔢</div>
+          <div class="card-label">Total Transactions</div>
+          <div class="card-value" id="a-txns">—</div>
+        </div>
+      </div>
+
+      <!-- Monthly Revenue Trend — full width -->
+      <div class="section-card" style="margin-bottom:20px;">
+        <div class="section-header">
+          <h3>📈 Monthly Revenue — Last 12 Months</h3>
+        </div>
+        <div class="section-body">
+          <div style="position:relative;height:300px;">
+            <canvas id="monthlyChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sales Count + Units Row -->
+      <div class="grid-2" style="margin-bottom:20px;">
+        <div class="section-card">
+          <div class="section-header"><h3>🧾 Monthly Transaction Count</h3></div>
+          <div class="section-body">
+            <div class="chart-wrap"><canvas id="txnChart"></canvas></div>
+          </div>
+        </div>
+        <div class="section-card">
+          <div class="section-header"><h3>📦 Monthly Units Sold</h3></div>
+          <div class="section-body">
+            <div class="chart-wrap"><canvas id="unitsChart"></canvas></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Category breakdown + bar -->
+      <div class="grid-2" style="margin-bottom:20px;">
+        <div class="section-card">
+          <div class="section-header"><h3>🥧 Category Distribution</h3></div>
+          <div class="section-body">
+            <div class="chart-wrap"><canvas id="catPieChart"></canvas></div>
+          </div>
+        </div>
+        <div class="section-card">
+          <div class="section-header"><h3>📊 Category Revenue Comparison</h3></div>
+          <div class="section-body">
+            <div class="chart-wrap"><canvas id="catBarChart"></canvas></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Category Detail Table -->
+      <div class="section-card">
+        <div class="section-header"><h3>📋 Category Details</h3></div>
+        <div class="section-body" style="padding:0;">
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Category</th>
+                  <th>Transactions</th>
+                  <th>Units Sold</th>
+                  <th>Revenue</th>
+                  <th>Revenue Share</th>
+                </tr>
+              </thead>
+              <tbody id="cat-body">
+                <tr><td colspan="5"><div class="spinner"></div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+
+<script src="js/api.js"></script>
+<script>
+const sidebar = document.getElementById('sidebar');
+const overlay = document.getElementById('sidebar-overlay');
+document.getElementById('menu-toggle').addEventListener('click', () => {
+  sidebar.classList.toggle('open'); overlay.classList.toggle('open');
+});
+overlay.addEventListener('click', () => {
+  sidebar.classList.remove('open'); overlay.classList.remove('open');
+});
+
+const GOLD_COLORS = ['#F5C842','#D4A017','#B8860B','#EF9F27','#FAC775','#9B6F00','#7A5500','#FAEEDA','#633806','#412402'];
+
+async function loadAnalytics() {
+  // Load summary
+  try {
+    const { data } = await AnalyticsAPI.summary();
+    document.getElementById('a-revenue').textContent = formatCurrency(data.total_revenue);
+    document.getElementById('a-aov').textContent     = formatCurrency(data.avg_order_value);
+    document.getElementById('a-month').textContent   = formatCurrency(data.this_month_revenue);
+    document.getElementById('a-txns').textContent    = data.total_sales.toLocaleString();
+
+    if (data.monthly_growth !== null) {
+      const pct = parseFloat(data.monthly_growth);
+      document.getElementById('a-growth').innerHTML =
+        `<span class="card-badge ${pct >= 0 ? 'up' : 'down'}">${pct >= 0 ? '▲' : '▼'} ${Math.abs(pct)}% vs last month</span>`;
+    }
+  } catch (e) { showToast('Summary error: ' + e.message, 'error'); }
+
+  // Load trend data
+  try {
+    const { data } = await AnalyticsAPI.trend();
+    const labels = data.map(d => d.label);
+
+    // Monthly Revenue (line, filled)
+    new Chart(document.getElementById('monthlyChart'), {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          {
+            type: 'line',
+            label: 'Revenue Trend',
+            data: data.map(d => d.revenue),
+            borderColor: '#D4A017',
+            pointBackgroundColor: '#D4A017',
+            pointRadius: 5,
+            tension: 0.4,
+            fill: false,
+            borderWidth: 2.5,
+            yAxisID: 'y',
+            order: 1,
+          },
+          {
+            type: 'bar',
+            label: 'Monthly Revenue',
+            data: data.map(d => d.revenue),
+            backgroundColor: 'rgba(212,160,23,.18)',
+            borderColor: 'rgba(212,160,23,.5)',
+            borderWidth: 1,
+            borderRadius: 4,
+            yAxisID: 'y',
+            order: 2,
+          }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { labels: { font: { family:'Inter',size:11 }, color:'#616161' } },
+          tooltip: { callbacks: { label: c => ` $${c.parsed.y.toLocaleString('en-US',{minimumFractionDigits:2})}` } },
+        },
+        scales: {
+          x: { grid: { display:false }, ticks: { color:'#9E9E9E',font:{size:11} } },
+          y: {
+            grid: { color:'#F5F5F5' },
+            ticks: { color:'#9E9E9E',font:{size:11}, callback: v => '$'+(v>=1000?(v/1000).toFixed(1)+'k':v) },
+          },
+        },
+      }
+    });
+
+    // Transaction count chart
+    new Chart(document.getElementById('txnChart'), {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Transactions',
+          data: data.map(d => d.sales_count),
+          backgroundColor: '#FAC775',
+          borderRadius: 4, borderSkipped: false,
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display:false } },
+        scales: {
+          x: { grid:{display:false}, ticks:{color:'#9E9E9E',font:{size:10},maxRotation:30} },
+          y: { grid:{color:'#F5F5F5'}, ticks:{color:'#9E9E9E',font:{size:11}} },
+        }
+      }
+    });
+
+    // Units sold chart
+    new Chart(document.getElementById('unitsChart'), {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Units Sold',
+          data: data.map(d => d.units_sold),
+          backgroundColor: '#EF9F27',
+          borderRadius: 4, borderSkipped: false,
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display:false } },
+        scales: {
+          x: { grid:{display:false}, ticks:{color:'#9E9E9E',font:{size:10},maxRotation:30} },
+          y: { grid:{color:'#F5F5F5'}, ticks:{color:'#9E9E9E',font:{size:11}} },
+        }
+      }
+    });
+  } catch (e) { showToast('Trend error: ' + e.message, 'error'); }
+
+  // Load category data
+  try {
+    const { data } = await AnalyticsAPI.categories();
+
+    // Pie chart
+    new Chart(document.getElementById('catPieChart'), {
+      type: 'doughnut',
+      data: {
+        labels: data.map(d => d.category),
+        datasets: [{ data: data.map(d => d.revenue), backgroundColor: GOLD_COLORS, borderWidth: 2, borderColor:'#fff' }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { position:'bottom', labels:{ font:{family:'Inter',size:11},color:'#616161',padding:10,boxWidth:12 } },
+          tooltip: { callbacks:{ label: c => ` ${c.label}: $${c.parsed.toLocaleString('en-US',{minimumFractionDigits:2})} (${data[c.dataIndex].percentage}%)` } }
+        },
+        cutout: '58%',
+      }
+    });
+
+    // Bar chart
+    new Chart(document.getElementById('catBarChart'), {
+      type: 'bar',
+      data: {
+        labels: data.map(d => d.category),
+        datasets: [{
+          label: 'Revenue',
+          data: data.map(d => d.revenue),
+          backgroundColor: GOLD_COLORS,
+          borderRadius: 5, borderSkipped: false,
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend:{display:false} },
+        scales: {
+          x: { grid:{color:'#F5F5F5'}, ticks:{color:'#9E9E9E',font:{size:11},callback:v=>'$'+(v>=1000?(v/1000).toFixed(0)+'k':v)} },
+          y: { grid:{display:false}, ticks:{color:'#616161',font:{size:12}} },
+        }
+      }
+    });
+
+    // Category table
+    const tbody = document.getElementById('cat-body');
+    tbody.innerHTML = data.map(c => `
+      <tr>
+        <td><span class="badge ${categoryClass(c.category)}">${c.category}</span></td>
+        <td>${c.sales_count}</td>
+        <td>${c.units.toLocaleString()}</td>
+        <td style="font-weight:700;color:var(--gold-600);">${formatCurrency(c.revenue)}</td>
+        <td>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div class="progress-bar-wrap"><div class="progress-bar" style="width:${c.percentage}%"></div></div>
+            <span style="font-size:12px;color:var(--gray-500);min-width:38px;">${c.percentage}%</span>
+          </div>
+        </td>
+      </tr>`).join('');
+  } catch (e) { showToast('Category error: ' + e.message, 'error'); }
+}
+
+loadAnalytics();
+</script>
+</body>
+</html>

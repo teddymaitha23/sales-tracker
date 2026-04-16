@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sales Tracker — Dashboard</title>
+  <link rel="stylesheet" href="css/main.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<div class="app-shell">
+  <!-- ── Sidebar ────────────────────────────────────────────── -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon">💰</div>
+      <h1>Sales Tracker</h1>
+      <span>Business Intelligence</span>
+    </div>
+
+    <nav class="sidebar-nav">
+      <div class="nav-section-label">Main</div>
+      <a href="index.html"    class="nav-link active">
+        <span class="nav-icon">📊</span> Dashboard
+      </a>
+      <a href="sales.html"    class="nav-link">
+        <span class="nav-icon">🧾</span> Sales Log
+      </a>
+      <a href="products.html" class="nav-link">
+        <span class="nav-icon">📦</span> Products
+      </a>
+      <a href="analytics.html" class="nav-link">
+        <span class="nav-icon">📈</span> Analytics
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">Sales Tracker v1.0</div>
+  </aside>
+
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+  <!-- ── Main Content ───────────────────────────────────────── -->
+  <div class="main-content">
+    <header class="top-header">
+      <div style="display:flex;align-items:center;gap:14px;">
+        <button class="menu-toggle" id="menu-toggle">☰</button>
+        <div class="header-left">
+          <h2>Dashboard</h2>
+          <p id="today-date">Loading…</p>
+        </div>
+      </div>
+      <div class="header-right">
+        <span class="header-badge" id="api-status">⏳ Connecting…</span>
+      </div>
+    </header>
+
+    <div class="page-body page-fade">
+      <!-- Metric Cards -->
+      <div class="metric-grid" id="metric-grid">
+        <div class="metric-card">
+          <div class="card-icon">💵</div>
+          <div class="card-label">Total Revenue</div>
+          <div class="card-value gold" id="m-revenue">—</div>
+          <div class="card-sub" id="m-revenue-sub">all time</div>
+        </div>
+        <div class="metric-card">
+          <div class="card-icon">🧾</div>
+          <div class="card-label">Total Sales</div>
+          <div class="card-value" id="m-sales">—</div>
+          <div class="card-sub">transactions</div>
+        </div>
+        <div class="metric-card">
+          <div class="card-icon">📦</div>
+          <div class="card-label">Units Sold</div>
+          <div class="card-value" id="m-units">—</div>
+          <div class="card-sub">items</div>
+        </div>
+        <div class="metric-card">
+          <div class="card-icon">🏆</div>
+          <div class="card-label">Best Product</div>
+          <div class="card-value" id="m-best" style="font-size:16px">—</div>
+          <div class="card-sub" id="m-best-rev">—</div>
+        </div>
+      </div>
+
+      <!-- Charts Row -->
+      <div class="grid-2" style="margin-bottom:20px;">
+        <div class="section-card">
+          <div class="section-header">
+            <h3>📈 Revenue Trend (12 months)</h3>
+          </div>
+          <div class="section-body">
+            <div class="chart-wrap">
+              <canvas id="trendChart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-card">
+          <div class="section-header">
+            <h3>🥧 Sales by Category</h3>
+          </div>
+          <div class="section-body">
+            <div class="chart-wrap">
+              <canvas id="categoryChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent Sales Table -->
+      <div class="section-card">
+        <div class="section-header">
+          <h3>🕐 Recent Sales</h3>
+          <a href="sales.html" class="btn btn-outline btn-sm">View All →</a>
+        </div>
+        <div class="section-body" style="padding:0;">
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Product</th>
+                  <th>Category</th>
+                  <th>Qty</th>
+                  <th>Unit Price</th>
+                  <th>Total</th>
+                  <th>Date</th>
+                </tr>
+              </thead>
+              <tbody id="recent-sales-body">
+                <tr><td colspan="6"><div class="spinner"></div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div class="toast-container" id="toast-container"></div>
+
+<script src="js/api.js"></script>
+<script>
+// ── Dashboard logic ────────────────────────────────────────────────────────
+document.getElementById('today-date').textContent =
+  new Date().toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+
+// Mobile sidebar toggle
+const sidebar  = document.getElementById('sidebar');
+const overlay  = document.getElementById('sidebar-overlay');
+const menuBtn  = document.getElementById('menu-toggle');
+menuBtn.addEventListener('click', () => {
+  sidebar.classList.toggle('open');
+  overlay.classList.toggle('open');
+});
+overlay.addEventListener('click', () => {
+  sidebar.classList.remove('open');
+  overlay.classList.remove('open');
+});
+
+// Chart.js gold palette
+const GOLD_COLORS = [
+  '#F5C842','#D4A017','#B8860B','#EF9F27','#FAC775',
+  '#9B6F00','#7A5500','#FAEEDA','#633806','#412402'
+];
+
+const CHART_DEFAULTS = {
+  plugins: { legend: { labels: { font: { family: 'Inter', size: 12 }, color: '#616161' } } },
+  scales: { default: { grid: { color: '#F5F5F5' }, ticks: { color: '#9E9E9E', font: { size: 11 } } } },
+};
+
+async function loadDashboard() {
+  try {
+    // Check API health
+    const health = await fetch('http://localhost:3001/health');
+    const statusEl = document.getElementById('api-status');
+    if (health.ok) {
+      statusEl.textContent = '🟢 API Connected';
+      statusEl.style.background = '#E8F5E9';
+      statusEl.style.color = '#2E7D32';
+      statusEl.style.borderColor = '#A5D6A7';
+    } else throw new Error();
+  } catch {
+    document.getElementById('api-status').textContent = '🔴 API Offline';
+    document.getElementById('api-status').style.background = '#FFEBEE';
+    document.getElementById('api-status').style.color = '#C62828';
+    showToast('Cannot connect to API. Is the backend running?', 'error');
+  }
+
+  // Load summary metrics
+  try {
+    const { data } = await AnalyticsAPI.summary();
+    document.getElementById('m-revenue').textContent  = formatCurrency(data.total_revenue);
+    document.getElementById('m-sales').textContent    = data.total_sales.toLocaleString();
+    document.getElementById('m-units').textContent    = data.total_units.toLocaleString();
+    document.getElementById('m-best').textContent     = data.best_product?.product || '—';
+    document.getElementById('m-best-rev').textContent = data.best_product
+      ? formatCurrency(data.best_product.revenue) + ' revenue'
+      : '';
+
+    if (data.monthly_growth !== null) {
+      const sub = document.getElementById('m-revenue-sub');
+      const pct = parseFloat(data.monthly_growth);
+      sub.innerHTML = `<span class="card-badge ${pct >= 0 ? 'up' : 'down'}">${pct >= 0 ? '▲' : '▼'} ${Math.abs(pct)}% vs last month</span>`;
+    }
+  } catch (e) {
+    console.error('Summary error:', e);
+    showToast('Failed to load metrics', 'error');
+  }
+
+  // Load trend chart
+  try {
+    const { data } = await AnalyticsAPI.trend();
+    const ctx = document.getElementById('trendChart').getContext('2d');
+    new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: data.map(d => d.label),
+        datasets: [{
+          label: 'Revenue',
+          data: data.map(d => d.revenue),
+          borderColor: '#D4A017',
+          backgroundColor: 'rgba(212,160,23,.08)',
+          tension: 0.4,
+          fill: true,
+          pointBackgroundColor: '#D4A017',
+          pointRadius: 4,
+          borderWidth: 2.5,
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: '#9E9E9E', font: { size: 11 } } },
+          y: {
+            grid: { color: '#F5F5F5' },
+            ticks: {
+              color: '#9E9E9E', font: { size: 11 },
+              callback: v => '$' + (v >= 1000 ? (v/1000).toFixed(1) + 'k' : v),
+            },
+          },
+        },
+      }
+    });
+  } catch (e) { console.error('Trend error:', e); }
+
+  // Load category chart
+  try {
+    const { data } = await AnalyticsAPI.categories();
+    const ctx = document.getElementById('categoryChart').getContext('2d');
+    new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: data.map(d => d.category),
+        datasets: [{
+          data: data.map(d => d.revenue),
+          backgroundColor: GOLD_COLORS.slice(0, data.length),
+          borderWidth: 2,
+          borderColor: '#fff',
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: { font: { family: 'Inter', size: 11 }, color: '#616161', padding: 12, boxWidth: 12 },
+          },
+          tooltip: {
+            callbacks: {
+              label: ctx => ` ${ctx.label}: $${ctx.parsed.toLocaleString('en-US', {minimumFractionDigits:2,maximumFractionDigits:2})}`
+            }
+          }
+        },
+        cutout: '62%',
+      }
+    });
+  } catch (e) { console.error('Category error:', e); }
+
+  // Load recent sales
+  try {
+    const { data } = await SalesAPI.getAll({ limit: 8 });
+    const tbody = document.getElementById('recent-sales-body');
+    if (!data.length) {
+      tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">📭</div><p>No sales yet</p></div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.map(s => `
+      <tr>
+        <td><strong>${s.product}</strong></td>
+        <td><span class="badge ${categoryClass(s.category)}">${s.category}</span></td>
+        <td>${s.quantity}</td>
+        <td>${formatCurrency(s.price)}</td>
+        <td><strong>${formatCurrency(s.total)}</strong></td>
+        <td>${formatDate(s.sale_date)}</td>
+      </tr>`).join('');
+  } catch (e) {
+    console.error('Sales error:', e);
+    document.getElementById('recent-sales-body').innerHTML =
+      '<tr><td colspan="6" style="text-align:center;color:#C62828;padding:20px;">Failed to load sales</td></tr>';
+  }
+}
+
+loadDashboard();
+</script>
+</body>
+</html>

@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sales Tracker — Products</title>
+  <link rel="stylesheet" href="css/main.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<div class="app-shell">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon">💰</div>
+      <h1>Sales Tracker</h1>
+      <span>Business Intelligence</span>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section-label">Main</div>
+      <a href="index.html"     class="nav-link"><span class="nav-icon">📊</span> Dashboard</a>
+      <a href="sales.html"     class="nav-link"><span class="nav-icon">🧾</span> Sales Log</a>
+      <a href="products.html"  class="nav-link active"><span class="nav-icon">📦</span> Products</a>
+      <a href="analytics.html" class="nav-link"><span class="nav-icon">📈</span> Analytics</a>
+    </nav>
+    <div class="sidebar-footer">Sales Tracker v1.0</div>
+  </aside>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+  <div class="main-content">
+    <header class="top-header">
+      <div style="display:flex;align-items:center;gap:14px;">
+        <button class="menu-toggle" id="menu-toggle">☰</button>
+        <div class="header-left">
+          <h2>Products</h2>
+          <p>Performance metrics per product</p>
+        </div>
+      </div>
+    </header>
+
+    <div class="page-body page-fade">
+      <!-- Summary row -->
+      <div class="metric-grid" id="product-metrics">
+        <div class="metric-card">
+          <div class="card-icon">📦</div>
+          <div class="card-label">Total Products</div>
+          <div class="card-value" id="p-total">—</div>
+        </div>
+        <div class="metric-card">
+          <div class="card-icon">🥇</div>
+          <div class="card-label">#1 by Revenue</div>
+          <div class="card-value" id="p-top-rev" style="font-size:15px;">—</div>
+          <div class="card-sub" id="p-top-rev-val">—</div>
+        </div>
+        <div class="metric-card">
+          <div class="card-icon">📊</div>
+          <div class="card-label">#1 by Units</div>
+          <div class="card-value" id="p-top-units" style="font-size:15px;">—</div>
+          <div class="card-sub" id="p-top-units-val">—</div>
+        </div>
+        <div class="metric-card">
+          <div class="card-icon">💹</div>
+          <div class="card-label">Avg Unit Price</div>
+          <div class="card-value gold" id="p-avg-price">—</div>
+        </div>
+      </div>
+
+      <!-- Chart + Table -->
+      <div class="grid-2" style="margin-bottom:20px;">
+        <div class="section-card">
+          <div class="section-header"><h3>💰 Revenue by Product</h3></div>
+          <div class="section-body">
+            <div class="chart-wrap"><canvas id="prodRevenueChart"></canvas></div>
+          </div>
+        </div>
+        <div class="section-card">
+          <div class="section-header"><h3>📦 Units Sold by Product</h3></div>
+          <div class="section-body">
+            <div class="chart-wrap"><canvas id="prodUnitsChart"></canvas></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Products detail table -->
+      <div class="section-card">
+        <div class="section-header"><h3>📋 Product Breakdown</h3></div>
+        <div class="section-body" style="padding:0;">
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th>Product</th>
+                  <th>Category</th>
+                  <th>Transactions</th>
+                  <th>Units Sold</th>
+                  <th>Avg Price</th>
+                  <th>Total Revenue</th>
+                  <th>Revenue Share</th>
+                </tr>
+              </thead>
+              <tbody id="products-body">
+                <tr><td colspan="8"><div class="spinner"></div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+
+<script src="js/api.js"></script>
+<script>
+const sidebar = document.getElementById('sidebar');
+const overlay = document.getElementById('sidebar-overlay');
+document.getElementById('menu-toggle').addEventListener('click', () => {
+  sidebar.classList.toggle('open'); overlay.classList.toggle('open');
+});
+overlay.addEventListener('click', () => {
+  sidebar.classList.remove('open'); overlay.classList.remove('open');
+});
+
+const GOLD_COLORS = ['#F5C842','#D4A017','#B8860B','#EF9F27','#FAC775','#9B6F00','#7A5500','#FAEEDA'];
+
+async function loadProducts() {
+  try {
+    const { data } = await AnalyticsAPI.products();
+
+    // Metrics
+    document.getElementById('p-total').textContent = data.length;
+    if (data[0]) {
+      document.getElementById('p-top-rev').textContent   = data[0].product;
+      document.getElementById('p-top-rev-val').textContent = formatCurrency(data[0].revenue);
+    }
+    // Top by units
+    const byUnits = [...data].sort((a,b) => b.units_sold - a.units_sold);
+    if (byUnits[0]) {
+      document.getElementById('p-top-units').textContent     = byUnits[0].product;
+      document.getElementById('p-top-units-val').textContent = byUnits[0].units_sold.toLocaleString() + ' units';
+    }
+    const avgPrice = data.reduce((s,p) => s + p.avg_price, 0) / (data.length || 1);
+    document.getElementById('p-avg-price').textContent = formatCurrency(avgPrice);
+
+    // Revenue chart (top 8)
+    const top8 = data.slice(0,8);
+    const ctxR = document.getElementById('prodRevenueChart').getContext('2d');
+    new Chart(ctxR, {
+      type: 'bar',
+      data: {
+        labels: top8.map(p => p.product),
+        datasets: [{
+          label: 'Revenue',
+          data: top8.map(p => p.revenue),
+          backgroundColor: GOLD_COLORS,
+          borderRadius: 5,
+          borderSkipped: false,
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: '#9E9E9E', font: { size: 10 }, maxRotation: 30 } },
+          y: { grid: { color: '#F5F5F5' }, ticks: { color: '#9E9E9E', font: { size: 11 }, callback: v => '$'+v.toLocaleString() } },
+        }
+      }
+    });
+
+    // Units chart (top 8)
+    const ctxU = document.getElementById('prodUnitsChart').getContext('2d');
+    new Chart(ctxU, {
+      type: 'bar',
+      data: {
+        labels: byUnits.slice(0,8).map(p => p.product),
+        datasets: [{
+          label: 'Units Sold',
+          data: byUnits.slice(0,8).map(p => p.units_sold),
+          backgroundColor: GOLD_COLORS,
+          borderRadius: 5,
+          borderSkipped: false,
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: '#9E9E9E', font: { size: 10 }, maxRotation: 30 } },
+          y: { grid: { color: '#F5F5F5' }, ticks: { color: '#9E9E9E', font: { size: 11 } } },
+        }
+      }
+    });
+
+    // Table
+    const totalRevenue = data.reduce((s,p) => s + p.revenue, 0);
+    const tbody = document.getElementById('products-body');
+    tbody.innerHTML = data.map((p, i) => {
+      const share = totalRevenue > 0 ? ((p.revenue / totalRevenue) * 100).toFixed(1) : '0.0';
+      const rankIcons = ['🥇','🥈','🥉'];
+      const rank = rankIcons[i] || `#${i+1}`;
+      return `
+        <tr>
+          <td style="font-weight:600;">${rank}</td>
+          <td><strong>${p.product}</strong></td>
+          <td><span class="badge ${categoryClass(p.category)}">${p.category}</span></td>
+          <td>${p.transactions}</td>
+          <td>${p.units_sold.toLocaleString()}</td>
+          <td>${formatCurrency(p.avg_price)}</td>
+          <td style="font-weight:700;color:var(--gold-600);">${formatCurrency(p.revenue)}</td>
+          <td>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div class="progress-bar-wrap" style="width:80px;">
+                <div class="progress-bar" style="width:${share}%"></div>
+              </div>
+              <span style="font-size:12px;color:var(--gray-500);">${share}%</span>
+            </div>
+          </td>
+        </tr>`;
+    }).join('');
+  } catch (err) {
+    showToast('Failed to load product data: ' + err.message, 'error');
+    document.getElementById('products-body').innerHTML =
+      `<tr><td colspan="8" style="text-align:center;color:var(--danger);padding:24px;">${err.message}</td></tr>`;
+  }
+}
+
+loadProducts();
+</script>
+</body>
+</html>
