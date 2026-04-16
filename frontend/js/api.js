@@ -1,7 +1,7 @@
 // js/api.js — Centralised API client with error handling
 
 // Change this to your deployed backend URL when deploying
-const API_BASE = 'https://sales-tracker-api.onrender.com';
+const API_BASE = 'https://sales-tracker-api-r69b.onrender.com';
 
 /**
  * Core fetch wrapper: adds base URL, handles errors, returns parsed JSON.
